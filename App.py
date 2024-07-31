@@ -1,32 +1,18 @@
 import streamlit as st
 import time
 import random
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 
+from AutoregModel import fetch_stocks, fetch_periods_intervals, fetch_stock_info, fetch_stock_history, \
+    generate_stock_prediction, get_predictions, plot_stock_data, get_bg_color
 
-# Function to simulate predictions and their accuracies
-def get_predictions():
-    stocks = ["Apple", "Amazon", "Nvidia", "Meta", "Netflix"]
-    predictions = {}
-    for stock in stocks:
-        predictions[stock] = {
-            "Buy": {"prediction": "Buy", "accuracy": random.randint(70, 100)},
-            "Hold": {"prediction": "Hold", "accuracy": random.randint(70, 100)},
-            "Sell": {"prediction": "Sell", "accuracy": random.randint(70, 100)}
-        }
-    return predictions
-
-
-# Function to get background color based on prediction
-def get_bg_color(prediction):
-    if prediction == "Buy":
-        return "green"
-    elif prediction == "Hold":
-        return "blue"
-    elif prediction == "Sell":
-        return "red"
-
-
+# Set page configuration
 st.set_page_config(layout="wide")
+
+# App title
 st.title("Trading App")
 
 # Sidebar configuration
@@ -58,10 +44,11 @@ if select_page == "Home":
             accuracy = data["accuracy"]
             st.markdown(f"""
             <div style="margin-bottom: 10px;">
-                <div style="background-color: {color}; padding: 5px; border-radius: 5px; width: 100px; text-align: center; display: inline-block; margin-right: 10px;">
-                    <p style="color: white; margin: 0; font-size: 14px;">{data["prediction"]}</p>
+                <span style="font-size: 16px;">{stock}</span>
+                <div style="background-color: {color}; padding: 5px; border-radius: 5px; width: 80px; text-align: center; display: inline-block; margin-right: 10px;">
+                    <p style="color: white; margin: 0; font-size: 12px;">{data["prediction"]}</p>
                 </div>
-                <span style="font-size: 14px;">Accuracy: {accuracy}%</span>
+                <span style="font-size: 12px;">Accuracy: {accuracy}%</span>
             </div>
             """, unsafe_allow_html=True)
 
@@ -76,6 +63,57 @@ elif select_page == "About":
         ### About AUTOREG
         Autoregression (AR) is a representation of a type of random process; as such, it is used to describe certain time-varying processes in nature, economics, etc.
         """)
+
+        # Integrate stock prediction functionality
+        st.write("Welcome to the Stock Prediction App. Please select a stock to view its information and predictions.")
+
+        # Fetch the stocks
+        stock_dict = fetch_stocks()
+
+        # Fetch the periods and intervals
+        periods_intervals = fetch_periods_intervals()
+
+        # Create sidebar options for stock selection
+        stock_ticker = st.sidebar.selectbox("Select a stock", list(stock_dict.keys()))
+        period = st.sidebar.selectbox("Select period", list(periods_intervals.keys()))
+        interval = st.sidebar.selectbox("Select interval", periods_intervals[period])
+
+        # Fetch stock info and display
+        st.header(f"Stock Information for {stock_ticker}")
+        stock_info = fetch_stock_info(stock_ticker)
+        for section, info in stock_info.items():
+            st.subheader(section)
+            for key, value in info.items():
+                st.write(f"**{key}**: {value}")
+
+        # Fetch stock history and display
+        st.header(f"Stock History for {stock_ticker}")
+        stock_history = fetch_stock_history(stock_ticker, period, interval)
+        st.write(stock_history.tail())
+
+        # Generate stock prediction and display
+        st.header(f"Stock Prediction for {stock_ticker}")
+        train_df, test_df, forecast, predictions = generate_stock_prediction(stock_ticker)
+        if train_df is not None:
+            st.write("Train Data")
+            st.line_chart(train_df)
+            st.write("Test Data")
+            st.line_chart(test_df)
+            st.write("Forecast")
+            st.line_chart(forecast)
+            st.write("Predictions")
+            st.line_chart(predictions)
+
+        # Display stock chart
+        st.header(f"{stock_ticker} Stock Chart")
+        plot_stock_data(stock_ticker)
+
+        # Display a tip based on the model's prediction
+        st.header(f"Trading Tip for {stock_ticker}")
+        tip = predictions[-1]  # Assuming the last prediction is the latest
+        st.markdown(f"### Tip: {tip['prediction']}")
+        st.markdown(f"**Model Accuracy**: {tip['accuracy']}%")
+
     elif select_model == "LSTM":
         st.markdown("""
         ### About LSTM
@@ -92,27 +130,6 @@ elif select_page == "Statistics":
     st.markdown("""
     ### Model Comparisons
     Here we will display the comparisons of the selected models based on their performance metrics.
-    """)
-
-    # Sample comparison data
-    st.markdown("""
-    | Stock          | Model         | Accuracy | Precision | Recall | F1 Score |
-    |----------------|---------------|----------|-----------|--------|----------|
-    | Apple          | AUTOREG       | 85%      | 0.80      | 0.85   | 0.82     |
-    | Apple          | LSTM          | 90%      | 0.88      | 0.90   | 0.89     |
-    | Apple          | RANDOM FOREST | 88%      | 0.86      | 0.88   | 0.87     |
-    | Amazon         | AUTOREG       | 80%      | 0.78      | 0.80   | 0.79     |
-    | Amazon         | LSTM          | 85%      | 0.84      | 0.85   | 0.84     |
-    | Amazon         | RANDOM FOREST | 89%      | 0.88      | 0.89   | 0.88     |
-    | Nvidia         | AUTOREG       | 82%      | 0.80      | 0.82   | 0.81     |
-    | Nvidia         | LSTM          | 88%      | 0.87      | 0.88   | 0.87     |
-    | Nvidia         | RANDOM FOREST | 87%      | 0.85      | 0.87   | 0.86     |
-    | Meta           | AUTOREG       | 78%      | 0.75      | 0.78   | 0.76     |
-    | Meta           | LSTM          | 84%      | 0.83      | 0.84   | 0.83     |
-    | Meta           | RANDOM FOREST | 86%      | 0.85      | 0.86   | 0.85     |
-    | Netflix        | AUTOREG       | 81%      | 0.80      | 0.81   | 0.80     |
-    | Netflix        | LSTM          | 86%      | 0.85      | 0.86   | 0.85     |
-    | Netflix        | RANDOM FOREST | 90%      | 0.88      | 0.90   | 0.89     |
     """)
 
     st.markdown(f"""
@@ -137,3 +154,8 @@ elif select_page == "Statistics":
         - **Parameter 2**: Value
         - **Differentiation Variable**: Explanation
         """)
+
+    # Example plot
+    stock = yf.Ticker('AAPL')
+    st.write(f"Showing data for {stock.ticker}")
+    plot_stock_data(stock, title=f"{stock.ticker} Stock Price Over Time")
